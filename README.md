@@ -25,6 +25,12 @@ object so an accidental invocation cannot pull large images onto every cluster
 node. Optional `prepull-tolerations` accepts a JSON array of Kubernetes
 toleration objects.
 
+Before applying manifests, the action gracefully deletes existing pods whose
+init, regular, or ephemeral containers are in `CrashLoopBackOff`, allowing their
+controllers to recreate them. By default this checks the whole target namespace;
+set `crashloop-pod-selector` to a Kubernetes label selector to narrow the pods in
+scope. Set `delete-crashloopbackoff-pods: "false"` to disable this behavior.
+
 The default pre-pull rollout timeout is five minutes. A restricted in-cluster
 watchdog deletes the DaemonSet after ten minutes if the runner disappears, while
 an `always()` cleanup step removes the DaemonSet and its namespaced RBAC resources
@@ -33,5 +39,5 @@ uniquely named DaemonSet.
 
 The target cluster must support the Kubernetes `ImageVolume` feature and the
 workflow identity must be able to create, patch, read, and delete DaemonSets,
-ServiceAccounts, Roles, and RoleBindings in the target namespace. Cluster context
-must be configured before invoking the action.
+ServiceAccounts, Roles, and RoleBindings, and to list and delete Pods in the
+target namespace. Cluster context must be configured before invoking the action.
