@@ -62,7 +62,11 @@ jq -e --arg name "$resource_name" '
 ' "$MOCK_MANIFEST" >/dev/null
 
 if [[ -n "$REAL_KUBECTL_BIN" ]]; then
-    "$REAL_KUBECTL_BIN" create --dry-run=client --validate=false -f "$MOCK_MANIFEST" >/dev/null
+    resource_count="$(jq '.items | length' "$MOCK_MANIFEST")"
+    for ((index = 0; index < resource_count; index++)); do
+        jq ".items[$index]" "$MOCK_MANIFEST" \
+            | "$REAL_KUBECTL_BIN" create --dry-run=client --validate=false -f - >/dev/null
+    done
 fi
 
 dry_run_line="$(grep -n 'apply --dry-run=server' "$MOCK_KUBECTL_LOG" | cut -d: -f1)"
