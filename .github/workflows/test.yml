@@ -16,11 +16,15 @@ jobs:
         run: sudo apt-get update -qq && sudo apt-get install -y shellcheck
       - name: Check shell scripts
         run: shellcheck k8s-deploy/scripts/*.sh tests/*.sh
-      - name: Install kubectl for client-side manifest validation
-        uses: Azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede
-        with:
-          version: latest
       - name: Run tests
         run: tests/run.sh
+        env:
+          PREPULL_TEST_MANIFEST_OUTPUT: /tmp/prepull-manifest.json
+      - name: Validate generated Kubernetes resources
+        run: >-
+          docker run --rm -i
+          ghcr.io/yannh/kubeconform@sha256:85dbef6b4b312b99133decc9c6fc9495e9fc5f92293d4ff3b7e1b30f5611823c
+          -strict -summary -kubernetes-version 1.33.0
+          < /tmp/prepull-manifest.json
       - name: Check workflow syntax
         run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7

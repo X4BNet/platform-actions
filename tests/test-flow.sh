@@ -5,7 +5,6 @@ set -euo pipefail
 ROOT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd)"
 TEST_TMP="$(mktemp -d)"
 trap 'rm -rf "$TEST_TMP"' EXIT
-REAL_KUBECTL_BIN="${REAL_KUBECTL_BIN:-$(command -v kubectl || true)}"
 
 cat > "$TEST_TMP/kubectl" <<'MOCK'
 #!/usr/bin/env bash
@@ -61,12 +60,8 @@ jq -e --arg name "$resource_name" '
     (.items[] | select(.kind == "DaemonSet") | .spec.template.spec.containers[0].securityContext.readOnlyRootFilesystem) == true
 ' "$MOCK_MANIFEST" >/dev/null
 
-if [[ -n "$REAL_KUBECTL_BIN" ]]; then
-    resource_count="$(jq '.items | length' "$MOCK_MANIFEST")"
-    for ((index = 0; index < resource_count; index++)); do
-        jq ".items[$index]" "$MOCK_MANIFEST" \
-            | "$REAL_KUBECTL_BIN" create --dry-run=client --validate=false -f - >/dev/null
-    done
+if [[ -n "${PREPULL_TEST_MANIFEST_OUTPUT:-}" ]]; then
+    cp "$MOCK_MANIFEST" "$PREPULL_TEST_MANIFEST_OUTPUT"
 fi
 
 dry_run_line="$(grep -n 'apply --dry-run=server' "$MOCK_KUBECTL_LOG" | cut -d: -f1)"
