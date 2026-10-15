@@ -1,0 +1,108 @@
+name: Deploy to Kubernetes with image pre-pull
+description: Pre-pull deployment images on selected workers, then run Azure/k8s-deploy@v1
+
+inputs:
+  namespace:
+    description: Target Kubernetes namespace. Defaults to default when omitted.
+    required: false
+  manifests:
+    description: Paths to manifest files used for deployment.
+    required: true
+    default: ""
+  images:
+    description: Newline-separated image references used for substitution and pre-pulling.
+    required: false
+  imagepullsecrets:
+    description: Newline-separated registry secret names added to workloads and the pre-pull DaemonSet.
+    required: false
+  kubectl-version:
+    description: kubectl version to install, or latest.
+    required: false
+  strategy:
+    description: Deployment strategy. Azure/k8s-deploy@v1 accepts none or canary.
+    required: false
+    default: none
+  traffic-split-method:
+    description: Canary traffic split method. Azure/k8s-deploy@v1 accepts pod or smi.
+    required: false
+    default: pod
+  baseline-and-canary-replicas:
+    description: Baseline and canary replica count.
+    required: false
+    default: "0"
+  percentage:
+    description: Percentage of traffic redirected to the canary deployment.
+    required: false
+    default: "0"
+  args:
+    description: Additional arguments forwarded to Azure/k8s-deploy@v1.
+    required: false
+  action:
+    description: Azure deployment action; deploy, promote, or reject.
+    required: true
+    default: deploy
+  force:
+    description: Add --force to the Azure deployment apply command.
+    required: false
+    default: "false"
+  prepull-node-selector:
+    description: Non-empty JSON object selecting the workers that must receive every image.
+    required: false
+  prepull-tolerations:
+    description: JSON array of Kubernetes tolerations for the pre-pull DaemonSet.
+    required: false
+    default: "[]"
+  prepull-timeout:
+    description: Maximum time to wait for the pre-pull DaemonSet rollout.
+    required: false
+    default: 5m
+  prepull-cleanup-timeout-seconds:
+    description: Delay before the in-cluster watchdog deletes the temporary DaemonSet.
+    required: false
+    default: "600"
+
+runs:
+  using: composite
+  steps:
+    - name: Install kubectl
+      uses: Azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede
+      with:
+        version: ${{ inputs.kubectl-version || 'latest' }}
+
+    - name: Pre-pull deployment images
+      id: prepull
+      if: ${{ inputs.action == 'deploy' }}
+      shell: bash
+      env:
+        INPUT_NAMESPACE: ${{ inputs.namespace }}
+        INPUT_IMAGES: ${{ inputs.images }}
+        INPUT_IMAGEPULLSECRETS: ${{ inputs.imagepullsecrets }}
+        INPUT_PREPULL_NODE_SELECTOR: ${{ inputs.prepull-node-selector }}
+        INPUT_PREPULL_TOLERATIONS: ${{ inputs.prepull-tolerations }}
+        INPUT_PREPULL_TIMEOUT: ${{ inputs.prepull-timeout }}
+        INPUT_PREPULL_CLEANUP_TIMEOUT_SECONDS: ${{ inputs.prepull-cleanup-timeout-seconds }}
+      run: "$GITHUB_ACTION_PATH/scripts/prepull.sh"
+
+    - name: Deploy manifests
+      uses: Azure/k8s-deploy@2f25f49dce3a648e1451f23f89fd73a2e1085123
+      with:
+        namespace: ${{ inputs.namespace }}
+        manifests: ${{ inputs.manifests }}
+        images: ${{ inputs.images }}
+        imagepullsecrets: ${{ inputs.imagepullsecrets }}
+        kubectl-version: ${{ inputs.kubectl-version }}
+        strategy: ${{ inputs.strategy }}
+        traffic-split-method: ${{ inputs.traffic-split-method }}
+        baseline-and-canary-replicas: ${{ inputs.baseline-and-canary-replicas }}
+        percentage: ${{ inputs.percentage }}
+        args: ${{ inputs.args }}
+        action: ${{ inputs.action }}
+        force: ${{ inputs.force }}
+
+    - name: Remove temporary pre-pull resources
+      if: ${{ always() }}
+      shell: bash
+      env:
+        INPUT_NAMESPACE: ${{ inputs.namespace }}
+        PREPULL_RESOURCE_NAME: ${{ steps.prepull.outputs.resource-name }}
+      run: "$GITHUB_ACTION_PATH/scripts/cleanup.sh"

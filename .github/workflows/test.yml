@@ -1,0 +1,26 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8
+      - name: Install ShellCheck
+        run: sudo apt-get update -qq && sudo apt-get install -y shellcheck
+      - name: Check shell scripts
+        run: shellcheck k8s-deploy/scripts/*.sh tests/*.sh
+      - name: Install kubectl for client-side manifest validation
+        uses: Azure/setup-kubectl@776406bce94f63e41d621b960d78ee25c8b76ede
+        with:
+          version: latest
+      - name: Run tests
+        run: tests/run.sh
+      - name: Check workflow syntax
+        run: docker run --rm -v "$PWD:/repo" -w /repo rhysd/actionlint:1.7.7
